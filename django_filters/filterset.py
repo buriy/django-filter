@@ -32,22 +32,40 @@ def get_declared_filters(bases, attrs, with_base_filters=True):
 
     return SortedDict(filters)
 
-def filters_for_model(model, fields=None, exclude=None, filter_for_field=None):
-    field_list = []
+def get_model_field(model, name):
+    parts = name.split('__')
     opts = model._meta
-    for f in sorted(opts.fields + opts.many_to_many):
-        if fields is not None and f.name not in fields:
+    for name in parts[:-1]:
+        rel = opts.get_field_by_name(name)[0]
+        if isinstance(rel, RelatedObject):
+            model = rel.model
+            opts = rel.opts
+        else:
+            model = rel.rel.to
+            opts = model._meta
+    rel, model, direct, _m2m = opts.get_field_by_name(parts[-1])
+    if not direct: # take field of inverse relation
+        return rel.field.rel.to_field
+    return rel
+
+def filters_for_model(model, fields=None, exclude=None, filter_for_field=None):
+    results = SortedDict()
+    opts = model._meta
+    
+    if not fields:
+        fields = [x.name for x in opts.fields + opts.many_to_many]
+        
+    for f in fields:
+        if exclude and f in exclude:
             continue
-        if exclude is not None and f.name in exclude:
-            continue
-        filter_ = filter_for_field(f, f.name)
-        if filter_:
-            field_list.append((f.name, filter_))
-    field_dict = SortedDict(field_list)
-    if fields:
-        field_dict = SortedDict([(f, field_dict.get(f)) for f in fields if
-            (not exclude) or (exclude and f not in exclude)])
-    return field_dict
+        model_field = get_model_field(model, f)
+
+        field_filter = filter_for_field(model_field, model_field.name)
+        if field_filter:
+            results[f] = field_filter
+            
+    #raise Exception(repr(results))
+    return results
 
 class FilterSetOptions(object):
     def __init__(self, options=None):
