@@ -1,2 +1,2 @@
-from django_filters.filterset import FilterSet
-from django_filters.filters import *
+from filterset import FilterSet
+from filters import *
